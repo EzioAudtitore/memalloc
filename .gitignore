@@ -1,13 +1,10 @@
-# --- This project's compiled test binaries (no file extension) ---
 test_basic
 test_stress
 test_patterns
 test_thread
 
-# --- Generated data, not source ---
 results.csv
 
-# --- Standard C build artifacts ---
 *.o
 *.obj
 *.a
@@ -18,13 +15,11 @@ results.csv
 *.exe
 *.out
 
-# --- Debug symbols ---
 *.dSYM/
 *.su
 *.idb
 *.pdb
 
-# --- Editor / OS cruft ---
 *.swp
 *~
 .DS_Store

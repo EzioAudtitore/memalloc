@@ -11,8 +11,8 @@ int main(void) {
     mymalloc_init(STRATEGY_FIRST_FIT);
     srand(42);
 
-    void   *ptrs[NUM_PTRS] = {0};
-    size_t  sizes[NUM_PTRS] = {0};
+    void *ptrs[NUM_PTRS] = {0};
+    size_t sizes[NUM_PTRS] = {0};
 
     for (int op = 0; op < NUM_OPS; op++) {
         int i = rand() % NUM_PTRS;
@@ -22,9 +22,8 @@ int main(void) {
             ptrs[i] = mymalloc(sz);
             assert(ptrs[i] != NULL);
             sizes[i] = sz;
-            memset(ptrs[i], (i % 256), sz);   /* canary fill */
+            memset(ptrs[i], (i % 256), sz);
         } else {
-            /* verify canary wasn't corrupted by a neighbouring block */
             unsigned char *p = (unsigned char *)ptrs[i];
             for (size_t k = 0; k < sizes[i]; k++) {
                 if (p[k] != (unsigned char)(i % 256)) {

@@ -1,7 +1,3 @@
-/* Each thread owns a disjoint slice of a shared pointer array and
- * hammers mymalloc/myfree concurrently with other threads. If the
- * internal locking is broken, this reliably corrupts memory or crashes. */
-
 #include "../src/mymalloc.h"
 #include <pthread.h>
 #include <stdio.h>
@@ -9,7 +5,7 @@
 #include <string.h>
 #include <assert.h>
 
-#define NUM_THREADS   8
+#define NUM_THREADS 8
 #define PTRS_PER_THREAD 64
 #define OPS_PER_THREAD 5000
 
@@ -21,8 +17,8 @@ static void *worker(void *arg) {
     thread_arg_t *targ = (thread_arg_t *)arg;
     unsigned int seed = 1000 + targ->id;
 
-    void   *ptrs[PTRS_PER_THREAD]  = {0};
-    size_t  sizes[PTRS_PER_THREAD] = {0};
+    void *ptrs[PTRS_PER_THREAD] = {0};
+    size_t sizes[PTRS_PER_THREAD] = {0};
     unsigned char tag = (unsigned char)(targ->id % 256);
 
     for (int op = 0; op < OPS_PER_THREAD; op++) {

@@ -6,51 +6,36 @@
 #include <unistd.h>
 #include <pthread.h>
 
-/* ---------- Tunables ---------- */
-#define ARENA_SIZE      (1 << 16)   /* 64 KB per arena chunk */
+#define ARENA_SIZE      (1 << 16)
 #define ALIGNMENT       16
-#define MIN_SPLIT_LEFT  32          /* don't split off slivers smaller than this */
+#define MIN_SPLIT_LEFT  32
 
-/* ---------- Block header ----------
- * Sits immediately before every block (free or allocated).
- * `size` is the usable size AFTER this header, not counting the header itself.
- */
 typedef struct header {
-    size_t          size;
-    int             is_free;
-    struct header  *next;      /* next block in free list (free blocks only) */
-    struct header  *phys_next; /* next block by address, for coalescing */
+    size_t size;
+    int is_free;
+    struct header *next;
+    struct header *phys_next;
 } header_t;
 
-/* ---------- Arena bookkeeping ----------
- * Multiple mmap'd arenas are chained together so we can grow on demand.
- */
 typedef struct arena {
-    void          *base;
-    size_t         size;
-    struct arena  *next;
+    void *base;
+    size_t size;
+    struct arena *next;
 } arena_t;
 
-static header_t   *free_list = NULL;
-static arena_t     *arenas    = NULL;
-static strategy_t   g_strategy = STRATEGY_FIRST_FIT;
-static size_t       g_arena_count = 0;
-static size_t       g_arena_bytes_total = 0;
+static header_t *free_list = NULL;
+static arena_t *arenas = NULL;
+static strategy_t g_strategy = STRATEGY_FIRST_FIT;
+static size_t g_arena_count = 0;
+static size_t g_arena_bytes_total = 0;
 
-/* Single global lock protecting all allocator state. Coarse-grained on
- * purpose -- simple, correct, and good enough to demonstrate thread safety.
- * A faster design would shard by arena or use per-thread arenas instead. */
 static pthread_mutex_t alloc_mutex = PTHREAD_MUTEX_INITIALIZER;
-
-/* ---------- Helpers ---------- */
 
 static size_t align_up(size_t n, size_t a) {
     return (n + a - 1) & ~(a - 1);
 }
 
 static void free_list_insert(header_t *h) {
-    /* Insert kept in address order -- this is what makes coalescing
-     * against list neighbours safe later. */
     h->is_free = 1;
     if (!free_list || h < free_list) {
         h->next = free_list;
@@ -73,7 +58,6 @@ static void free_list_remove(header_t *target) {
     if (cur) cur->next = target->next;
 }
 
-/* Request a new arena from the kernel and stitch it into the free list. */
 static header_t *grow(size_t min_size) {
     size_t want = ARENA_SIZE;
     while (want < min_size + sizeof(header_t)) want *= 2;
@@ -95,14 +79,12 @@ static header_t *grow(size_t min_size) {
     h->size = want - sizeof(header_t);
     h->is_free = 1;
     h->next = NULL;
-    h->phys_next = NULL; /* first block of a fresh arena has no phys neighbour yet */
+    h->phys_next = NULL;
 
     free_list_insert(h);
     return h;
 }
 
-/* Split `h` so that it holds exactly `size` usable bytes, and the
- * leftover becomes a new free block right after it in memory. */
 static void split_if_worthwhile(header_t *h, size_t size) {
     size_t leftover = h->size - size;
     if (leftover < sizeof(header_t) + MIN_SPLIT_LEFT) return;
@@ -118,7 +100,6 @@ static void split_if_worthwhile(header_t *h, size_t size) {
     free_list_insert(new_h);
 }
 
-/* Merge `h` with its physical successor if that successor is also free. */
 static void coalesce_forward(header_t *h) {
     header_t *nxt = h->phys_next;
     if (nxt && nxt->is_free) {
@@ -127,8 +108,6 @@ static void coalesce_forward(header_t *h) {
         h->phys_next = nxt->phys_next;
     }
 }
-
-/* ---------- Public API ---------- */
 
 void mymalloc_init(strategy_t strategy) {
     pthread_mutex_lock(&alloc_mutex);
@@ -154,7 +133,7 @@ static void *mymalloc_locked(size_t size) {
                 break;
             } else if (g_strategy == STRATEGY_BEST_FIT) {
                 if (!chosen || cur->size < chosen->size) chosen = cur;
-            } else { /* WORST_FIT */
+            } else {
                 if (!chosen || cur->size > chosen->size) chosen = cur;
             }
         }
@@ -163,7 +142,7 @@ static void *mymalloc_locked(size_t size) {
 
     if (!chosen) {
         chosen = grow(size);
-        if (!chosen) return NULL; /* mmap failed, e.g. OOM */
+        if (!chosen) return NULL;
     }
 
     free_list_remove(chosen);
@@ -184,8 +163,6 @@ static void myfree_locked(void *ptr) {
 
     free_list_insert(h);
     coalesce_forward(h);
-    /* Note: to also coalesce *backward* you'd need a footer or a
-     * doubly-linked physical list -- left as an extension. */
 }
 
 void *mymalloc(size_t size) {
@@ -203,7 +180,7 @@ void myfree(void *ptr) {
 
 void *mycalloc(size_t nmemb, size_t size) {
     size_t total = nmemb * size;
-    if (nmemb != 0 && total / nmemb != size) return NULL; /* overflow check */
+    if (nmemb != 0 && total / nmemb != size) return NULL;
     void *p = mymalloc(total);
     if (p) memset(p, 0, total);
     return p;
@@ -217,7 +194,7 @@ void *myrealloc(void *ptr, size_t size) {
     header_t *h = ((header_t *)ptr) - 1;
     if (h->size >= size) {
         pthread_mutex_unlock(&alloc_mutex);
-        return ptr; /* good enough already */
+        return ptr;
     }
     pthread_mutex_unlock(&alloc_mutex);
 
@@ -227,8 +204,6 @@ void *myrealloc(void *ptr, size_t size) {
     myfree(ptr);
     return new_ptr;
 }
-
-/* ---------- Debug helpers ---------- */
 
 void mymalloc_dump_free_list(void) {
     pthread_mutex_lock(&alloc_mutex);
